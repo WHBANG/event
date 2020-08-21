@@ -1,0 +1,42 @@
+stages:
+  - test
+  - binary
+
+variables:
+  END_POINT: https://oss-cn-shanghai.aliyuncs.com
+  GO111MODULE: "on"
+  GOPROXY: https://goproxy.cn,direct
+  GOPRIVATE: git.supremind.info
+
+go_test:
+  except:
+    variables:
+      - $BUILD
+  stage: test
+  image: golang:1.13-stretch
+  tags:
+    - dind
+  before_script:
+    - echo "machine git.supremind.info login gitlab-ci-token password ${CI_JOB_TOKEN}"> ~/.netrc
+  script:
+    - go test ./...
+
+build_binary:
+  only:
+    variables:
+      - $BUILD == 'binary'
+  stage: binary
+  image: golang:1.13-stretch
+  tags:
+    - vas
+  before_script:
+    - wget http://gosspublic.alicdn.com/ossutil/1.6.14/ossutil64 -O /bin/ossutil -q && chmod +x /bin/ossutil
+    - echo "machine git.supremind.info login gitlab-ci-token password ${CI_JOB_TOKEN}"> ~/.netrc
+  script:
+    - export GOOS=linux GOARCH=amd64; go build -o "test-${GOOS}-${GOARCH}" git.supremind.info/product/visionmind/test/event_test/cmd
+    - export GOOS=darwin GOARCH=amd64; go build  -o "test-${GOOS}-${GOARCH}" git.supremind.info/product/visionmind/test/event_test/cmd
+    - export GOOS=windows GOARCH=amd64; go build  -o "test-${GOOS}-${GOARCH}.exe" git.supremind.info/product/visionmind/test/event_test/cmd
+    - cp -r config ./conf
+    - tar czvf test.tar.gz ./test-* ./conf
+    - ossutil cp -f test.tar.gz "oss://ai-private-devtools/supremind/test.tar.gz"  -e  "${END_POINT}"   -i "${OSS_AK}" -k "${OSS_SK}"
+    - echo https://ai-private-devtools.oss-cn-shanghai.aliyuncs.com/supremind/test.tar.gz;
